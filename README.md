@@ -1,4 +1,4 @@
-# tweetDots
+# tweetDots (Pusher sign)
 Hacked bus flip-dot display to use for twitter feed
 Description of the project
 https://www.behance.net/gallery/9206947/tweetDots
