@@ -14,21 +14,19 @@
 const byte dotFont = 'w';
 
 const byte address = 0x6; // front sign address
-//const byte address = 0xb; // rear sign address
 
 // Length of line in characters
 const int lineLength = 23;        
 
-byte data[256];
-int dataIdx = 0;
-byte currentY = 0x0;
-const int stepH = 300; // step time in msecs for horizontal scrolling
-const int stepV = 300; // step time in msecs for vertical scrolling
+const int stepH = 250; // step time in msecs for horizontal scrolling, avoids buffer overflow
+const int stepV = 300; // step time in msecs for vertical scrolling, avoids buffer overflow
 const int delayMulti = 5000; // time in screen for multiline display
-
 
 const byte width = 0x62; // display width in dots
 const byte height = 0x10; // display height in dots
+
+byte data[256];
+int dataIdx = 0;
 
 int arraySize(char array[]){
   int count=0;
@@ -48,6 +46,7 @@ void copyArray(char *a1, char *a2){
 }
 
 void printLine(byte x, byte y, char font, String buffer){ // Adds a line to the command string, choosing font, start and end position
+  byte currentX=x;
   data[dataIdx++] = 0xD2; // X position mark
   data[dataIdx++] = x;    // X-coordinate
   data[dataIdx++] = 0xD3; // Y Position mark
@@ -55,8 +54,9 @@ void printLine(byte x, byte y, char font, String buffer){ // Adds a line to the 
   data[dataIdx++] = 0xD4; // font mark
   data[dataIdx++] = font; // font type
   for (int i=0; buffer[i]!='\0'; i++){
-    encodeChar(buffer[i]);
+    currentX = encodeChar(buffer[i], currentX, y);
   }
+  currentX=0;
 #ifdef DEBUG  
   Serial.println(buffer); 
 #endif
@@ -69,52 +69,143 @@ int skipBlanks(char *buffer, int idx){
   return idx;
 }
 
-void encodeChar(char c){
+int dotsInChar(char c){
+  int dots=0;
+  switch(c){
+  case 'f':
+  case 'h':
+  case 't':
+  case 'v':
+  case 'r':
+  case 'C':
+  case 'I':
+  case '1':
+  case '"':
+  case '-':
+  case '+':
+  case '<':
+  case '>':
+    dots = 3;
+    break;
+  case 'i':
+  case 'l':
+  case '!':
+  case '\'':
+  case ':':
+  case ',':
+  case '.':
+    dots = 1;
+    break;
+  case 'j':
+  case '(':
+  case ')':
+  case ' ':
+    dots = 2;
+    break;
+  case 'm':
+  case 'w':
+  case 'x':
+  case 'M':
+  case 'V':
+  case 'W':
+  case 'X':
+  case 'Y':
+  case 'Z':
+  case '#':
+  case '%':
+  case '&':
+    dots = 5;
+  default:
+    dots = 4;
+    break;
+  }
+  return dots+1; // width in dots plus an empty dot after character
+}
+
+int encodeChar(char c, byte x, byte y){
+  byte currentX=x;
   // Manually generate special symbols
   switch(c){
   case ',':
     data[dataIdx++]=0xD4;
     data[dataIdx++]=dotFont;
     data[dataIdx++]=0xD3;
-    data[dataIdx++]=currentY+1;
+    data[dataIdx++]=y+1;
     data[dataIdx++]=0x30;
     data[dataIdx++]=0x2c;
     data[dataIdx++]=0x20;
     data[dataIdx++]=0xD3;
-    data[dataIdx++]=currentY;
+    data[dataIdx++]=y;
     data[dataIdx++]=0xD4;
     data[dataIdx++]=font;
+    currentX+=3;
     break;
   case ';':
     data[dataIdx++]=0xD4;
     data[dataIdx++]=dotFont;
     data[dataIdx++]=0xD3;
-    data[dataIdx++]=currentY+1;
+    data[dataIdx++]=y+1;
     data[dataIdx++]=0x30;
     data[dataIdx++]=0xD3;
-    data[dataIdx++]=currentY;
+    data[dataIdx++]=y;
     data[dataIdx++]=0x39;
     data[dataIdx++]=0x20;
     data[dataIdx++]=0xD4;
     data[dataIdx++]=font;
+    currentX+=3;
     break;
   case '[':
+    data[dataIdx++]=0xD2;
+    data[dataIdx++]=currentX;
+    data[dataIdx++]=0xD3;
+    data[dataIdx++]=y-2;
     data[dataIdx++]=0xD4;
     data[dataIdx++]=dotFont;
+    data[dataIdx++]=0x23;
+    data[dataIdx++]=0x21;
+    data[dataIdx++]=0xD2;
+    data[dataIdx++]=currentX;
+    data[dataIdx++]=0xD3;
+    data[dataIdx++]=y;    
     data[dataIdx++]=0x3f;
-    data[dataIdx++]=0x31;
+    data[dataIdx++]=0xD2;
+    data[dataIdx++]=currentX+1;
+    data[dataIdx++]=0xD3;
+    data[dataIdx++]=y;
+    data[dataIdx++]=0x30;
     data[dataIdx++]=0x20;
+    data[dataIdx++]=0x20;
+    data[dataIdx++]=0xD3;
+    data[dataIdx++]=y;
     data[dataIdx++]=0xD4;
     data[dataIdx++]=font;
+    currentX+=4;
     break;
   case ']':
+    data[dataIdx++]=0xD2;
+    data[dataIdx++]=currentX+1;
+    data[dataIdx++]=0xD3;
+    data[dataIdx++]=y-2;
     data[dataIdx++]=0xD4;
     data[dataIdx++]=dotFont;
-    data[dataIdx++]=0x31;
+    data[dataIdx++]=0x21;
+    data[dataIdx++]=0x23;
+    data[dataIdx++]=0xD2;
+    data[dataIdx++]=currentX+1;
+    data[dataIdx++]=0xD3;
+    data[dataIdx++]=y;
+    data[dataIdx++]=0x30;
+    data[dataIdx++]=0xD2;
+    data[dataIdx++]=currentX+2;
+    data[dataIdx++]=0xD3;
+    data[dataIdx++]=y;    
     data[dataIdx++]=0x3f;
     data[dataIdx++]=0x20;
+    data[dataIdx++]=0xD3;
+    data[dataIdx++]=y;
     data[dataIdx++]=0xD4;
     data[dataIdx++]=font;
+    currentX+=4;
     break;  
   case '_':
     data[dataIdx++]=0xD4;
@@ -126,56 +217,88 @@ void encodeChar(char c){
     data[dataIdx++]=0x20;
     data[dataIdx++]=0xD4;
     data[dataIdx++]=font;
+    currentX+=5;
     break;
   case '$':
+    data[dataIdx++]=0xD2;
+    data[dataIdx++]=currentX+2;
+    data[dataIdx++]=0xD3;
+    data[dataIdx++]=y-5;
     data[dataIdx++]=0xD4;
     data[dataIdx++]=dotFont;
-    data[dataIdx++]=0x32;
-    data[dataIdx++]=0x3d;
-    data[dataIdx++]=0x37;
+    data[dataIdx++]=0x30;
+    data[dataIdx++]=0xD2;
+    data[dataIdx++]=currentX;
+    data[dataIdx++]=0xD3;
+    data[dataIdx++]=y-2;
+    data[dataIdx++]=0x26;
     data[dataIdx++]=0x29;
-    data[dataIdx++]=0x20;
+    data[dataIdx++]=0x3f;
+    data[dataIdx++]=0x29;
+    data[dataIdx++]=0x32;
+    data[dataIdx++]=0xD2;
+    data[dataIdx++]=currentX;
+    data[dataIdx++]=0xD3;
+    data[dataIdx++]=y;
+    data[dataIdx++]=0x28;
+    data[dataIdx++]=0x30;
+    data[dataIdx++]=0x38;
+    data[dataIdx++]=0x30;
+    data[dataIdx++]=0x28;
+    data[dataIdx++]=0x20;    
+    currentX+=6;
+    data[dataIdx++]=0xD2;
+    data[dataIdx++]=currentX;
+    data[dataIdx++]=0xD3;
+    data[dataIdx++]=y;
     data[dataIdx++]=0xD4;
     data[dataIdx++]=font;
     break;
-      case '@':
-    //  [at] text
-//        data[dataIdx++]=0xD4;
-//        data[dataIdx++]=dotFont;
-//        data[dataIdx++]=0x3f;
-//        data[dataIdx++]=0x31;
-//        data[dataIdx++]=0x20;
-//        data[dataIdx++]=0xD4;
-//        data[dataIdx++]=font;
-//        data[dataIdx++]='a';
-//        data[dataIdx++]='t';
-//        data[dataIdx++]=0xD4;
-//        data[dataIdx++]=dotFont;
-//        data[dataIdx++]=0x31;
-//        data[dataIdx++]=0x3f;
-//        data[dataIdx++]=0x20;
-//        data[dataIdx++]=0xD4;
-//        data[dataIdx++]=font;
-    //  (at) text
-        data[dataIdx++]='(';
-        data[dataIdx++]='a';
-        data[dataIdx++]='t';
-        data[dataIdx++]=')';
-    //  5x4 symbol
-    //    data[dataIdx++]=0xD4;
-    //    data[dataIdx++]=dotFont;
-    //    data[dataIdx++]=0x2e;
-    //    data[dataIdx++]=0x3d;
-    //    data[dataIdx++]=0x33;
-    //    data[dataIdx++]=0x3e;
-    //    data[dataIdx++]=0x20;
-    //    data[dataIdx++]=0xD4;
-    //    data[dataIdx++]=font;
-        break;
+  case '@':
+    data[dataIdx++]=0xD2;
+    data[dataIdx++]=currentX+2;
+    data[dataIdx++]=0xD3;
+    data[dataIdx++]=y-2;
+    data[dataIdx++]=0xD4;
+    data[dataIdx++]=dotFont;
+    data[dataIdx++]=0x21;
+    data[dataIdx++]=0x21;
+    data[dataIdx++]=0x21;
+    data[dataIdx++]=0xD2;
+    data[dataIdx++]=currentX;
+    data[dataIdx++]=0xD3;
+    data[dataIdx++]=y-1;
+    data[dataIdx++]=0x3e;
+    data[dataIdx++]=0x21;
+    data[dataIdx++]=0x2c;
+    data[dataIdx++]=0x32;
+    data[dataIdx++]=0x2e;
+    data[dataIdx++]=0x31;
+    data[dataIdx++]=0x2e;
+    data[dataIdx++]=0xD2;
+    data[dataIdx++]=currentX+1;
+    data[dataIdx++]=0xD3;
+    data[dataIdx++]=y+4;
+    data[dataIdx++]=0x21;
+    data[dataIdx++]=0x22;
+    data[dataIdx++]=0x22;
+    data[dataIdx++]=0x22;
+    data[dataIdx++]=0x22;
+    data[dataIdx++]=0x21;
+    currentX+=8;
+    data[dataIdx++]=0xD2;
+    data[dataIdx++]=currentX;
+    data[dataIdx++]=0xD3;
+    data[dataIdx++]=y;
+    data[dataIdx++]=0xD4;
+    data[dataIdx++]=font;
+    break;
   default:
     // normal character
-    data[dataIdx++]=c; // buffer
+    currentX+=dotsInChar(c);
+    data[dataIdx++]=c; 
   }
+  return currentX;
 }
 
 int formatLine(char *buffer, int idx, char *line){
@@ -209,15 +332,13 @@ int printScreen(char *buffer, int idx){
   // Skip blanks at the begginning of line
   idx = skipBlanks(buffer, idx);  
   idx = formatLine(buffer, idx, line1);
-  currentY = 0x6;
   printLine(0x00, 0x06, font, line1);
   if (idx != -1){ // There's another line
     char line2[lineLength]="";
     // Skip blanks at the begginning of line
     idx=skipBlanks(buffer, idx);  
     idx = formatLine(buffer, idx, line2);
-    currentY = 0xf;
-    printLine(0x00, 0x0f, font, line2);  
+    printLine(0x00, 0x0e, font, line2);  
   }
   sendData();
   return idx;
@@ -238,21 +359,17 @@ void scrollV(char *buffer){
   char line1[lineLength]="";
   char line2[lineLength]="";
   // Skip blanks at the begginning of line
-  currentY = height+0x7;
   idx = skipBlanks(buffer, idx);  
   idx = formatLine(buffer, idx, line1);
   for (int i=0; i <= height/2; i++){ //scroll first line until the half of the display
-    currentY = height+0x7-i;
     printLine(0x00, height+0x7-i, font, line1);
     sendData();
     delay(stepV);
   }
   while (idx != -1){ 
-    currentY = height+0x7;
     idx = skipBlanks(buffer, idx);  
     idx = formatLine(buffer, idx, line2);
     for (int i=height/2; i <= height+1; i++){
-      currentY = height+0x7-i;
       printLine(0x00, height+0x7-i, font, line1);
       printLine(0x00, 2*height-i, font, line2);  
       sendData();
@@ -262,7 +379,6 @@ void scrollV(char *buffer){
   }
   // scroll to the top of the display
   for (int i=height/2; i <= height+1; i++){
-    currentY = height+0x7-i;
     printLine(0x00, height+0x7-i, font, line1);
     sendData();
     delay(stepV);
@@ -354,6 +470,7 @@ void receiveData(){
     }
   }
 }
+
 
 
 
